@@ -54,6 +54,36 @@ button {
   border: 1px solid #22c55e;
 }
 
+details {
+  margin-top: 12px;
+}
+
+summary {
+  cursor: pointer;
+  color: #93c5fd;
+}
+
+.trade-table-wrap {
+  overflow-x: auto;
+}
+
+.trade-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+}
+
+.trade-table th,
+.trade-table td {
+  border-bottom: 1px solid #334155;
+  padding: 6px;
+  text-align: left;
+  font-size: 13px;
+}
+
+.pnl-pos { color: #4ade80; }
+.pnl-neg { color: #f87171; }
+
 fieldset { border: 1px solid #334155; border-radius: 8px; padding: 10px; }
 legend { padding: 0 6px; }
 .checkbox-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }

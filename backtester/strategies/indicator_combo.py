@@ -43,14 +43,40 @@ def run_indicator_combo(
     max_positions = 5 if allow_multiple_positions else 1
     equity = [1.0]
     trades = 0
+    open_entries: list[dict[str, float | int | str]] = []
+    closed_trades: list[dict[str, float | int | str]] = []
 
     for i in range(1, len(data)):
         if bullish_all.iloc[i] and open_positions < max_positions:
             open_positions += 1
             trades += 1
+            open_entries.append(
+                {
+                    "entry_index": i,
+                    "entry_time": data.index[i].isoformat(),
+                    "entry_price": round(float(data["close"].iloc[i]), 4),
+                }
+            )
 
         if bearish_any.iloc[i] and open_positions > 0:
+            exit_price = float(data["close"].iloc[i])
+            exit_time = data.index[i].isoformat()
+            for entry in open_entries:
+                entry_price = float(entry["entry_price"])
+                pnl_pct = ((exit_price / entry_price) - 1) * 100
+                closed_trades.append(
+                    {
+                        "entry_time": entry["entry_time"],
+                        "exit_time": exit_time,
+                        "entry_price": entry_price,
+                        "exit_price": round(exit_price, 4),
+                        "pnl_pct": round(pnl_pct, 2),
+                        "holding_candles": i - int(entry["entry_index"]),
+                    }
+                )
+
             open_positions = 0
+            open_entries = []
 
         leverage = open_positions if allow_multiple_positions else min(open_positions, 1)
         current = equity[-1] * (1 + leverage * data["ret"].iloc[i])
@@ -63,12 +89,19 @@ def run_indicator_combo(
         "Entry requires all selected indicators to be bullish at the same candle. "
         "Exit happens when any selected indicator turns bearish."
     )
+    gains = [float(t["pnl_pct"]) for t in closed_trades]
+    winning = [g for g in gains if g > 0]
+    win_rate_pct = (len(winning) / len(gains) * 100) if gains else 0.0
+    average_gain_pct = (sum(gains) / len(gains)) if gains else 0.0
 
     return BacktestResult(
         total_return_pct=round(float(total_return_pct), 2),
         trades=trades,
         equity_curve=equity_curve,
         notes=notes,
+        win_rate_pct=round(win_rate_pct, 2),
+        average_gain_pct=round(average_gain_pct, 2),
+        trade_details=closed_trades,
     )
 
 

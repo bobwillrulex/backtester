@@ -14,8 +14,8 @@
     <form method="post" action="/backtest" class="card">
       <label>Data Provider
         <select id="provider" name="provider">
-          <option value="alpha" selected>Alpha Vantage</option>
-          <option value="yahoo">Yahoo Finance</option>
+          <option value="alpha" {% if form_data.provider == 'alpha' %}selected{% endif %}>Alpha Vantage</option>
+          <option value="yahoo" {% if form_data.provider == 'yahoo' %}selected{% endif %}>Yahoo Finance</option>
         </select>
       </label>
 
@@ -24,25 +24,25 @@
       </label>
 
       <label>Ticker
-        <input type="text" name="ticker" placeholder="NVDA" required />
+        <input type="text" name="ticker" placeholder="NVDA" value="{{ form_data.ticker }}" required />
       </label>
 
       <label>Candle Type
-        <select id="data_mode" name="data_mode"></select>
+        <select id="data_mode" name="data_mode" data-selected="{{ form_data.data_mode }}"></select>
       </label>
 
       <label>Candle Length
-        <select id="interval" name="interval"></select>
+        <select id="interval" name="interval" data-selected="{{ form_data.interval }}"></select>
       </label>
 
       <label>Lookback (days)
-        <input type="number" name="lookback_days" min="5" value="365" required />
+        <input type="number" name="lookback_days" min="5" value="{{ form_data.lookback_days }}" required />
       </label>
 
       <label>Position Mode
         <select name="position_mode">
-          <option value="single" selected>Only one open position</option>
-          <option value="multi">Multi-position mode</option>
+          <option value="single" {% if form_data.position_mode == 'single' %}selected{% endif %}>Only one open position</option>
+          <option value="multi" {% if form_data.position_mode == 'multi' %}selected{% endif %}>Multi-position mode</option>
         </select>
       </label>
 
@@ -51,7 +51,7 @@
         <div class="checkbox-grid">
           {% for key, label in indicator_options.items() %}
           <label>
-            <input type="checkbox" name="indicators" value="{{ key }}" {% if key == 'fair_value_gap' %}checked{% endif %}/>
+            <input type="checkbox" name="indicators" value="{{ key }}" {% if key in form_data.indicators %}checked{% endif %}/>
             {{ label }}
           </label>
           {% endfor %}
@@ -73,8 +73,42 @@
         <p><strong>Candles used:</strong> {{ result.candles }}</p>
         <p><strong>Total Return:</strong> {{ result.return_pct }}%</p>
         <p><strong>Trades:</strong> {{ result.trades }}</p>
+        <p><strong>Win Rate:</strong> {{ result.win_rate_pct }}%</p>
+        <p><strong>Average Gain per Trade:</strong> {{ result.average_gain_pct }}%</p>
         <p><strong>Indicators:</strong> {{ result.indicators|join(', ') }}</p>
         <p><strong>Logic:</strong> {{ result.notes }}</p>
+
+        {% if result.trade_details %}
+        <details>
+          <summary>View more details ({{ result.trade_details|length }} closed trades)</summary>
+          <div class="trade-table-wrap">
+            <table class="trade-table">
+              <thead>
+                <tr>
+                  <th>Entry Time</th>
+                  <th>Exit Time</th>
+                  <th>Entry</th>
+                  <th>Exit</th>
+                  <th>PnL %</th>
+                  <th>Bars Held</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for trade in result.trade_details %}
+                <tr>
+                  <td>{{ trade.entry_time }}</td>
+                  <td>{{ trade.exit_time }}</td>
+                  <td>{{ trade.entry_price }}</td>
+                  <td>{{ trade.exit_price }}</td>
+                  <td class="{% if trade.pnl_pct >= 0 %}pnl-pos{% else %}pnl-neg{% endif %}">{{ trade.pnl_pct }}%</td>
+                  <td>{{ trade.holding_candles }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+        {% endif %}
       </section>
     {% endif %}
   </main>
@@ -89,7 +123,7 @@ const apiKeyInput = document.getElementById('api_key');
 function syncModes() {
   const provider = providerEl.value;
   const modeOptions = Object.keys(options[provider]);
-  const current = modeEl.value;
+  const current = modeEl.value || modeEl.dataset.selected;
   modeEl.innerHTML = '';
 
   for (const value of modeOptions) {
@@ -115,13 +149,21 @@ function syncModes() {
 function syncIntervals() {
   const provider = providerEl.value;
   const mode = modeEl.value;
+  const selectedInterval = intervalEl.value || intervalEl.dataset.selected;
   intervalEl.innerHTML = '';
 
   for (const value of options[provider][mode]) {
     const opt = document.createElement('option');
     opt.value = value;
     opt.textContent = value;
+    if (value === selectedInterval) {
+      opt.selected = true;
+    }
     intervalEl.appendChild(opt);
+  }
+
+  if (!options[provider][mode].includes(intervalEl.value)) {
+    intervalEl.value = options[provider][mode][0];
   }
 }
 

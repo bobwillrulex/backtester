@@ -31,7 +31,16 @@ INTERVAL_OPTIONS = {
 }
 
 
-def render_home(*, result=None, error=None, api_key=DEFAULT_API_KEY, requests_remaining=None):
+def render_home(*, result=None, error=None, api_key=DEFAULT_API_KEY, requests_remaining=None, form_data=None):
+    form_data = form_data or {
+        "provider": "alpha",
+        "data_mode": "daily",
+        "interval": "1day",
+        "ticker": "",
+        "lookback_days": 365,
+        "position_mode": "single",
+        "indicators": ["fair_value_gap"],
+    }
     return render_template(
         "index.html",
         interval_options=INTERVAL_OPTIONS,
@@ -40,6 +49,7 @@ def render_home(*, result=None, error=None, api_key=DEFAULT_API_KEY, requests_re
         requests_remaining=alpha_client.get_requests_remaining() if requests_remaining is None else requests_remaining,
         result=result,
         error=error,
+        form_data=form_data,
     )
 
 
@@ -58,6 +68,15 @@ def run_backtest():
     selected_indicators = request.form.getlist("indicators")
     position_mode = request.form.get("position_mode", "single")
     api_key = request.form.get("api_key", "").strip() or DEFAULT_API_KEY
+    form_data = {
+        "provider": provider,
+        "data_mode": data_mode,
+        "interval": interval,
+        "ticker": ticker,
+        "lookback_days": lookback_days,
+        "position_mode": position_mode,
+        "indicators": selected_indicators,
+    }
 
     local_alpha_client = AlphaVantageClient(api_key=api_key)
     local_alpha_client.requests_made = alpha_client.requests_made
@@ -96,14 +115,18 @@ def run_backtest():
         return render_home(
             api_key=api_key,
             requests_remaining=requests_remaining,
+            form_data=form_data,
             result={
                 "ticker": ticker,
                 "provider": provider,
                 "candles": len(candles),
                 "return_pct": result.total_return_pct,
                 "trades": result.trades,
+                "win_rate_pct": result.win_rate_pct,
+                "average_gain_pct": result.average_gain_pct,
                 "notes": result.notes,
                 "indicators": [INDICATORS[i] for i in selected_indicators],
+                "trade_details": result.trade_details,
             },
         )
     except (ValueError, DataClientError) as exc:
@@ -112,6 +135,7 @@ def run_backtest():
             api_key=api_key,
             requests_remaining=local_alpha_client.get_requests_remaining(),
             error=str(exc),
+            form_data=form_data,
         )
 
 
