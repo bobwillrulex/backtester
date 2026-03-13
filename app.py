@@ -75,6 +75,7 @@ def run_backtest():
             error=None,
         )
     except (ValueError, AlphaVantageError) as exc:
+        app.logger.exception("Backtest request failed: %s", exc)
         return render_template(
             "index.html",
             interval_options=INTERVAL_OPTIONS,

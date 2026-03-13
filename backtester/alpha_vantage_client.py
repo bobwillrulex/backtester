@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+import json
 from typing import Literal
 
 import pandas as pd
@@ -79,7 +80,11 @@ class AlphaVantageClient:
         if "Error Message" in payload:
             raise AlphaVantageError(payload["Error Message"])
         if key not in payload:
-            raise AlphaVantageError("Alpha Vantage did not return expected candle data.")
+            serialized_payload = json.dumps(payload, ensure_ascii=False)
+            raise AlphaVantageError(
+                "Alpha Vantage did not return expected candle data. "
+                f"Expected key '{key}'. Full response: {serialized_payload}"
+            )
 
         raw = payload[key]
         frame = (
