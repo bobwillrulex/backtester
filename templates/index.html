@@ -46,6 +46,13 @@
         </select>
       </label>
 
+      <label>Trade Category
+        <select name="trade_category">
+          <option value="none" {% if form_data.trade_category == 'none' %}selected{% endif %}>No category (hold overnight)</option>
+          <option value="day" {% if form_data.trade_category == 'day' %}selected{% endif %}>Day trades only (close before overnight)</option>
+        </select>
+      </label>
+
       <fieldset>
         <legend>Indicators / Strategies (select one or more)</legend>
         <div class="checkbox-grid">
