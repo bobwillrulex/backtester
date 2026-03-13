@@ -57,9 +57,12 @@ class AlphaVantageClient:
         else:
             raise DataClientError(f"Unsupported data mode for Alpha Vantage: {req.mode}")
 
-        response = requests.get(self.BASE_URL, params=params, timeout=30)
+        try:
+            response = requests.get(self.BASE_URL, params=params, timeout=30)
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            raise DataClientError(f"Failed to fetch Alpha Vantage data: {exc}") from exc
         self.requests_made += 1
-        response.raise_for_status()
         payload = response.json()
 
         if "Note" in payload:
@@ -114,13 +117,16 @@ class YahooFinanceClient:
             raise DataClientError(f"Unsupported Yahoo interval: {req.interval}")
 
         period = self._period_from_lookback(req.lookback_days, req.mode)
-        response = requests.get(
-            f"{self.BASE_URL}/{req.symbol.upper()}",
-            params={"interval": interval, "range": period},
-            timeout=30,
-            headers={"User-Agent": "Mozilla/5.0"},
-        )
-        response.raise_for_status()
+        try:
+            response = requests.get(
+                f"{self.BASE_URL}/{req.symbol.upper()}",
+                params={"interval": interval, "range": period},
+                timeout=30,
+                headers={"User-Agent": "Mozilla/5.0"},
+            )
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            raise DataClientError(f"Failed to fetch Yahoo Finance data: {exc}") from exc
         payload = response.json()
 
         chart = payload.get("chart", {})
