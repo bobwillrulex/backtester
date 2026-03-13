@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alpha Vantage Backtester</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>Alpha Vantage Backtester</h1>
+    <p class="sub">Requests remaining this session: <strong>{{ requests_remaining }}</strong>/25</p>
+
+    <form method="post" action="/backtest" class="card">
+      <label>API Key
+        <input type="text" name="api_key" value="{{ default_api_key }}" required />
+      </label>
+
+      <label>Ticker
+        <input type="text" name="ticker" placeholder="NVDA" required />
+      </label>
+
+      <label>Candle Type
+        <select id="data_mode" name="data_mode">
+          <option value="intraday">Intraday</option>
+          <option value="daily" selected>Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+      </label>
+
+      <label>Candle Length
+        <select id="interval" name="interval"></select>
+      </label>
+
+      <label>Lookback (days)
+        <input type="number" name="lookback_days" min="5" value="365" required />
+      </label>
+
+      <label>Position Mode
+        <select name="position_mode">
+          <option value="single" selected>Only one open position</option>
+          <option value="multi">Multi-position mode</option>
+        </select>
+      </label>
+
+      <label>Strategy
+        <select name="strategy">
+          {% for strategy in strategies %}
+          <option value="{{ strategy }}">{{ strategy }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <button type="submit">Run Backtest</button>
+    </form>
+
+    {% if error %}
+      <section class="card error">{{ error }}</section>
+    {% endif %}
+
+    {% if result %}
+      <section class="card result">
+        <h2>Result</h2>
+        <p><strong>Ticker:</strong> {{ result.ticker }}</p>
+        <p><strong>Candles used:</strong> {{ result.candles }}</p>
+        <p><strong>Total Return:</strong> {{ result.return_pct }}%</p>
+        <p><strong>Trades:</strong> {{ result.trades }}</p>
+        <p><strong>Strategy logic:</strong> {{ result.notes }}</p>
+      </section>
+    {% endif %}
+  </main>
+
+<script>
+const options = {{ interval_options|tojson }};
+const modeEl = document.getElementById('data_mode');
+const intervalEl = document.getElementById('interval');
+
+function syncIntervals() {
+  const mode = modeEl.value;
+  intervalEl.innerHTML = '';
+  for (const value of options[mode]) {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = value;
+    intervalEl.appendChild(opt);
+  }
+}
+
+modeEl.addEventListener('change', syncIntervals);
+syncIntervals();
+</script>
+</body>
+</html>
