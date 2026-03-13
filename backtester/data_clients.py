@@ -106,6 +106,7 @@ class YahooFinanceClient:
         "15min": "15m",
         "30min": "30m",
         "60min": "60m",
+        "1hr": "60m",
         "1day": "1d",
         "1week": "1wk",
         "1month": "1mo",

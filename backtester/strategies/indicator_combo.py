@@ -24,6 +24,7 @@ def run_indicator_combo(
     candles: pd.DataFrame,
     selected_indicators: list[str],
     allow_multiple_positions: bool,
+    hold_overnight: bool = True,
 ) -> BacktestResult:
     if not selected_indicators:
         raise ValueError("Select at least one indicator.")
@@ -46,7 +47,33 @@ def run_indicator_combo(
     open_entries: list[dict[str, float | int | str]] = []
     closed_trades: list[dict[str, float | int | str]] = []
 
+    def close_all_positions(*, exit_price: float, exit_time: str, exit_index: int) -> None:
+        nonlocal open_entries, open_positions
+        for entry in open_entries:
+            entry_price = float(entry["entry_price"])
+            pnl_pct = ((exit_price / entry_price) - 1) * 100
+            closed_trades.append(
+                {
+                    "entry_time": entry["entry_time"],
+                    "exit_time": exit_time,
+                    "entry_price": entry_price,
+                    "exit_price": round(exit_price, 4),
+                    "pnl_pct": round(pnl_pct, 2),
+                    "holding_candles": exit_index - int(entry["entry_index"]),
+                }
+            )
+
+        open_positions = 0
+        open_entries = []
+
     for i in range(1, len(data)):
+        if not hold_overnight and open_positions > 0 and data.index[i].date() != data.index[i - 1].date():
+            close_all_positions(
+                exit_price=float(data["close"].iloc[i - 1]),
+                exit_time=data.index[i - 1].isoformat(),
+                exit_index=i - 1,
+            )
+
         if bullish_all.iloc[i] and open_positions < max_positions:
             open_positions += 1
             trades += 1
@@ -59,24 +86,11 @@ def run_indicator_combo(
             )
 
         if bearish_any.iloc[i] and open_positions > 0:
-            exit_price = float(data["close"].iloc[i])
-            exit_time = data.index[i].isoformat()
-            for entry in open_entries:
-                entry_price = float(entry["entry_price"])
-                pnl_pct = ((exit_price / entry_price) - 1) * 100
-                closed_trades.append(
-                    {
-                        "entry_time": entry["entry_time"],
-                        "exit_time": exit_time,
-                        "entry_price": entry_price,
-                        "exit_price": round(exit_price, 4),
-                        "pnl_pct": round(pnl_pct, 2),
-                        "holding_candles": i - int(entry["entry_index"]),
-                    }
-                )
-
-            open_positions = 0
-            open_entries = []
+            close_all_positions(
+                exit_price=float(data["close"].iloc[i]),
+                exit_time=data.index[i].isoformat(),
+                exit_index=i,
+            )
 
         leverage = open_positions if allow_multiple_positions else min(open_positions, 1)
         current = equity[-1] * (1 + leverage * data["ret"].iloc[i])
@@ -89,6 +103,8 @@ def run_indicator_combo(
         "Entry requires all selected indicators to be bullish at the same candle. "
         "Exit happens when any selected indicator turns bearish."
     )
+    if not hold_overnight:
+        notes += " Open trades are also closed at each day boundary to avoid overnight holds."
     gains = [float(t["pnl_pct"]) for t in closed_trades]
     winning = [g for g in gains if g > 0]
     win_rate_pct = (len(winning) / len(gains) * 100) if gains else 0.0

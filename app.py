@@ -23,7 +23,7 @@ INTERVAL_OPTIONS = {
         "monthly": ["1month"],
     },
     "yahoo": {
-        "intraday": ["1min", "5min", "15min", "30min", "60min"],
+        "intraday": ["1min", "5min", "15min", "30min", "1hr"],
         "daily": ["1day"],
         "weekly": ["1week"],
         "monthly": ["1month"],
@@ -39,6 +39,7 @@ def render_home(*, result=None, error=None, api_key=DEFAULT_API_KEY, requests_re
         "ticker": "",
         "lookback_days": 365,
         "position_mode": "single",
+        "trade_category": "none",
         "indicators": ["fair_value_gap"],
     }
     return render_template(
@@ -67,6 +68,7 @@ def run_backtest():
     lookback_days = int(request.form.get("lookback_days", "365"))
     selected_indicators = request.form.getlist("indicators")
     position_mode = request.form.get("position_mode", "single")
+    trade_category = request.form.get("trade_category", "none")
     api_key = request.form.get("api_key", "").strip() or DEFAULT_API_KEY
     form_data = {
         "provider": provider,
@@ -75,6 +77,7 @@ def run_backtest():
         "ticker": ticker,
         "lookback_days": lookback_days,
         "position_mode": position_mode,
+        "trade_category": trade_category,
         "indicators": selected_indicators,
     }
 
@@ -90,6 +93,8 @@ def run_backtest():
             raise ValueError(f"{provider.title()} does not support {data_mode} mode.")
         if interval not in INTERVAL_OPTIONS[provider][data_mode]:
             raise ValueError("Invalid candle interval for selected provider/mode.")
+        if trade_category not in {"none", "day"}:
+            raise ValueError("Invalid trade category selected.")
 
         req = CandleRequest(
             symbol=ticker,
@@ -110,6 +115,7 @@ def run_backtest():
             candles,
             selected_indicators=selected_indicators,
             allow_multiple_positions=(position_mode == "multi"),
+            hold_overnight=(trade_category == "none"),
         )
 
         return render_home(
