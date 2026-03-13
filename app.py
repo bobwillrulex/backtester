@@ -23,7 +23,7 @@ INTERVAL_OPTIONS = {
         "monthly": ["1month"],
     },
     "yahoo": {
-        "intraday": ["1min", "5min", "15min", "30min", "1hr"],
+        "intraday": ["1min", "5min", "15min", "30min", "60min", "1hr"],
         "daily": ["1day"],
         "weekly": ["1week"],
         "monthly": ["1month"],

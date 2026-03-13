@@ -3,7 +3,7 @@
 A simple Flask backtester with:
 
 - Data provider toggle (Alpha Vantage or Yahoo Finance)
-- Intraday candles via Yahoo Finance (1/5/15/30 min + 1 hr)
+- Intraday candles via Yahoo Finance (1/5/15/30/60 min + 1 hr alias)
 - Daily/weekly/monthly candles via both providers
 - Lookback period in days (e.g. 365 for 1 year)
 - Request tracking for Alpha Vantage's 25-request/day free tier
