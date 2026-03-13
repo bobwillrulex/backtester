@@ -3,17 +3,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Alpha Vantage Backtester</title>
+  <title>Backtester</title>
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
   <main class="container">
-    <h1>Alpha Vantage Backtester</h1>
-    <p class="sub">Requests remaining this session: <strong>{{ requests_remaining }}</strong>/25</p>
+    <h1>Backtester</h1>
+    <p class="sub">Alpha Vantage requests remaining this session: <strong>{{ requests_remaining }}</strong>/25</p>
 
     <form method="post" action="/backtest" class="card">
-      <label>API Key
-        <input type="text" name="api_key" value="{{ default_api_key }}" required />
+      <label>Data Provider
+        <select id="provider" name="provider">
+          <option value="alpha" selected>Alpha Vantage</option>
+          <option value="yahoo">Yahoo Finance</option>
+        </select>
+      </label>
+
+      <label>Alpha API Key
+        <input type="text" id="api_key" name="api_key" value="{{ default_api_key }}" required />
       </label>
 
       <label>Ticker
@@ -21,12 +28,7 @@
       </label>
 
       <label>Candle Type
-        <select id="data_mode" name="data_mode">
-          <option value="intraday">Intraday</option>
-          <option value="daily" selected>Daily</option>
-          <option value="weekly">Weekly</option>
-          <option value="monthly">Monthly</option>
-        </select>
+        <select id="data_mode" name="data_mode"></select>
       </label>
 
       <label>Candle Length
@@ -44,13 +46,17 @@
         </select>
       </label>
 
-      <label>Strategy
-        <select name="strategy">
-          {% for strategy in strategies %}
-          <option value="{{ strategy }}">{{ strategy }}</option>
+      <fieldset>
+        <legend>Indicators / Strategies (select one or more)</legend>
+        <div class="checkbox-grid">
+          {% for key, label in indicator_options.items() %}
+          <label>
+            <input type="checkbox" name="indicators" value="{{ key }}" {% if key == 'fair_value_gap' %}checked{% endif %}/>
+            {{ label }}
+          </label>
           {% endfor %}
-        </select>
-      </label>
+        </div>
+      </fieldset>
 
       <button type="submit">Run Backtest</button>
     </form>
@@ -63,23 +69,55 @@
       <section class="card result">
         <h2>Result</h2>
         <p><strong>Ticker:</strong> {{ result.ticker }}</p>
+        <p><strong>Provider:</strong> {{ result.provider }}</p>
         <p><strong>Candles used:</strong> {{ result.candles }}</p>
         <p><strong>Total Return:</strong> {{ result.return_pct }}%</p>
         <p><strong>Trades:</strong> {{ result.trades }}</p>
-        <p><strong>Strategy logic:</strong> {{ result.notes }}</p>
+        <p><strong>Indicators:</strong> {{ result.indicators|join(', ') }}</p>
+        <p><strong>Logic:</strong> {{ result.notes }}</p>
       </section>
     {% endif %}
   </main>
 
 <script>
 const options = {{ interval_options|tojson }};
+const providerEl = document.getElementById('provider');
 const modeEl = document.getElementById('data_mode');
 const intervalEl = document.getElementById('interval');
+const apiKeyInput = document.getElementById('api_key');
+
+function syncModes() {
+  const provider = providerEl.value;
+  const modeOptions = Object.keys(options[provider]);
+  const current = modeEl.value;
+  modeEl.innerHTML = '';
+
+  for (const value of modeOptions) {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = value;
+    if (value === current) {
+      opt.selected = true;
+    }
+    modeEl.appendChild(opt);
+  }
+
+  if (!modeOptions.includes(modeEl.value)) {
+    modeEl.value = modeOptions[0];
+  }
+
+  syncIntervals();
+  const isAlpha = provider === 'alpha';
+  apiKeyInput.required = isAlpha;
+  apiKeyInput.disabled = !isAlpha;
+}
 
 function syncIntervals() {
+  const provider = providerEl.value;
   const mode = modeEl.value;
   intervalEl.innerHTML = '';
-  for (const value of options[mode]) {
+
+  for (const value of options[provider][mode]) {
     const opt = document.createElement('option');
     opt.value = value;
     opt.textContent = value;
@@ -87,8 +125,9 @@ function syncIntervals() {
   }
 }
 
+providerEl.addEventListener('change', syncModes);
 modeEl.addEventListener('change', syncIntervals);
-syncIntervals();
+syncModes();
 </script>
 </body>
 </html>
