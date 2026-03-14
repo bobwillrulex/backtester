@@ -244,6 +244,29 @@ def run_indicator_combo(
     )
 
 
+def latest_entry_signal(candles: pd.DataFrame, selected_indicators: list[str]) -> dict[str, bool | str]:
+    if not selected_indicators:
+        raise ValueError("Select at least one indicator.")
+    if candles.empty:
+        raise ValueError("No candle data available.")
+
+    data = candles.copy()
+    bullish_map: dict[str, pd.Series] = {}
+    bearish_map: dict[str, pd.Series] = {}
+    for indicator in selected_indicators:
+        bullish_map[indicator], bearish_map[indicator] = _indicator_signals(data, indicator)
+
+    last = data.index[-1]
+    bullish_all = all(bool(bullish_map[ind].loc[last]) for ind in selected_indicators)
+    bearish_any = any(bool(bearish_map[ind].loc[last]) for ind in selected_indicators)
+
+    return {
+        "is_buy": bullish_all,
+        "is_bearish": bearish_any,
+        "as_of": _format_trade_time(last),
+    }
+
+
 def _indicator_signals(data: pd.DataFrame, indicator: str) -> tuple[pd.Series, pd.Series]:
     close = data["close"]
     high = data["high"]
