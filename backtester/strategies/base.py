@@ -16,6 +16,11 @@ class BacktestResult:
     liquidated_return_pct: float = 0.0
     win_rate_pct: float = 0.0
     average_gain_pct: float = 0.0
+    max_drawdown_pct: float = 0.0
+    volatility_pct: float = 0.0
+    profit_factor: float = 0.0
+    sharpe_ratio: float = 0.0
+    quality_score: float = 0.0
     trade_details: list[dict[str, str | float | int]] = field(default_factory=list)
 
 
