@@ -127,6 +127,8 @@ def run_backtest():
                 "provider": provider,
                 "candles": len(candles),
                 "return_pct": result.total_return_pct,
+                "previous_return_pct": result.previous_return_pct,
+                "liquidated_return_pct": result.liquidated_return_pct,
                 "trades": result.trades,
                 "win_rate_pct": result.win_rate_pct,
                 "average_gain_pct": result.average_gain_pct,

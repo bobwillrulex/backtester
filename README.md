@@ -29,3 +29,4 @@ Then open `http://localhost:5000`.
 - Bid/ask spread is not included.
 - Multi-position mode allows stacking up to 5 concurrent long positions.
 - Combo logic: all selected indicators must be bullish to enter; any selected bearish signal exits.
+- Return reporting includes current equity, previous flat-equity checkpoint, and end-of-backtest liquidated equity

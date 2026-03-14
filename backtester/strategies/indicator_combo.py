@@ -46,6 +46,7 @@ def run_indicator_combo(
     trades = 0
     open_entries: list[dict[str, float | int | str]] = []
     closed_trades: list[dict[str, float | int | str]] = []
+    last_flat_equity = 1.0
 
     def close_all_positions(*, exit_price: float, exit_time: str, exit_index: int) -> None:
         nonlocal open_entries, open_positions
@@ -96,8 +97,21 @@ def run_indicator_combo(
         current = equity[-1] * (1 + leverage * data["ret"].iloc[i])
         equity.append(max(current, 0.0))
 
+        if open_positions == 0:
+            last_flat_equity = equity[-1]
+
     equity_curve = pd.Series(equity, index=data.index)
     total_return_pct = (equity_curve.iloc[-1] - 1) * 100
+    previous_return_pct = (last_flat_equity - 1) * 100
+
+    final_close = float(data["close"].iloc[-1])
+    liquidated_equity = equity_curve.iloc[-1]
+    if open_entries:
+        liquidated_equity = 0.0
+        for entry in open_entries:
+            entry_price = float(entry["entry_price"])
+            liquidated_equity += final_close / entry_price
+    liquidated_return_pct = (liquidated_equity - 1) * 100
 
     notes = (
         "Entry requires all selected indicators to be bullish at the same candle. "
@@ -112,6 +126,8 @@ def run_indicator_combo(
 
     return BacktestResult(
         total_return_pct=round(float(total_return_pct), 2),
+        previous_return_pct=round(float(previous_return_pct), 2),
+        liquidated_return_pct=round(float(liquidated_return_pct), 2),
         trades=trades,
         equity_curve=equity_curve,
         notes=notes,
