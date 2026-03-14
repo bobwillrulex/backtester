@@ -9,7 +9,7 @@ from backtester.data_clients import (
     Russell1000Client,
     YahooFinanceClient,
 )
-from backtester.strategies.indicator_combo import INDICATORS, run_indicator_combo
+from backtester.strategies.indicator_combo import INDICATORS, latest_entry_signal, run_indicator_combo
 
 DEFAULT_API_KEY = "5OTAZMSKH3K8A5KI"
 
@@ -35,7 +35,7 @@ INTERVAL_OPTIONS = {
 
 def _default_form() -> dict:
     return {
-        "run_mode": "backtest",
+        "run_mode": "find",
         "provider": "alpha",
         "data_mode": "daily",
         "interval": "1day",
@@ -146,7 +146,7 @@ def run_backtest():
             raise ValueError("Invalid stop-loss mode selected.")
         if stop_loss_percent <= 0 or stop_loss_percent >= 100:
             raise ValueError("Stop-loss percent must be between 0 and 100.")
-        if run_mode not in {"backtest", "scan"}:
+        if run_mode not in {"backtest", "scan", "find"}:
             raise ValueError("Invalid mode selected.")
         if scan_limit < 1 or scan_limit > 1000:
             raise ValueError("Scan limit must be between 1 and 1000.")
@@ -226,6 +226,20 @@ def run_backtest():
                         lookback_days=lookback_days,
                     )
                 )
+
+                if run_mode == "find":
+                    signal = latest_entry_signal(candles, selected_indicators)
+                    if signal["is_buy"]:
+                        matches.append(
+                            {
+                                "symbol": symbol,
+                                "name": stock.get("name") or "-",
+                                "signal_time": signal["as_of"],
+                                "close": round(float(candles["close"].iloc[-1]), 4),
+                            }
+                        )
+                    continue
+
                 scan_result = run_indicator_combo(
                     candles,
                     selected_indicators=selected_indicators,
@@ -257,18 +271,21 @@ def run_backtest():
                 failures += 1
                 continue
 
-        ranked_matches = sorted(
-            matches,
-            key=lambda item: (item["quality_score"], item["sharpe_ratio"], item["return_pct"]),
-            reverse=True,
-        )[:25]
+        if run_mode == "find":
+            ranked_matches = sorted(matches, key=lambda item: item["symbol"])[:200]
+        else:
+            ranked_matches = sorted(
+                matches,
+                key=lambda item: (item["quality_score"], item["sharpe_ratio"], item["return_pct"]),
+                reverse=True,
+            )[:25]
 
         return render_home(
             api_key=api_key,
             requests_remaining=alpha_client.get_requests_remaining(),
             form_data=form_data,
             result={
-                "mode": "scan",
+                "mode": run_mode,
                 "provider": "yahoo",
                 "candles": None,
                 "indicators": [INDICATORS[i] for i in selected_indicators],

@@ -15,7 +15,8 @@
       <label>Run Mode
         <select name="run_mode" id="run_mode">
           <option value="backtest" {% if form_data.run_mode == 'backtest' %}selected{% endif %}>Backtest a single ticker</option>
-          <option value="scan" {% if form_data.run_mode == 'scan' %}selected{% endif %}>Find stocks in Russell 1000</option>
+          <option value="find" {% if form_data.run_mode == 'find' %}selected{% endif %}>Find buy signals in Russell 1000 (latest candle)</option>
+          <option value="scan" {% if form_data.run_mode == 'scan' %}selected{% endif %}>Backtest scan in Russell 1000</option>
         </select>
       </label>
 
@@ -96,7 +97,7 @@
         </div>
       </fieldset>
 
-      <button type="submit">Run</button>
+      <button type="submit">Find Stocks</button>
     </form>
 
     {% if error %}
@@ -161,6 +162,40 @@
               </table>
             </div>
           </details>
+          {% endif %}
+        {% elif result.mode == 'find' %}
+          <p><strong>Find universe:</strong> Russell 1000 (Yahoo Finance)</p>
+          <p><strong>Logic:</strong> Returns symbols where all selected indicators are currently bullish on the latest candle.</p>
+          <p><strong>Indicators:</strong> {{ result.indicators|join(', ') }}</p>
+          <p><strong>Symbols checked:</strong> {{ result.scan_total }}</p>
+          <p><strong>Buy matches:</strong> {{ result.scan_matches }}</p>
+          <p><strong>Skipped (data/errors):</strong> {{ result.scan_failures }}</p>
+
+          {% if result.matches %}
+          <div class="trade-table-wrap">
+            <table class="trade-table">
+              <thead>
+                <tr>
+                  <th>Symbol</th>
+                  <th>Name</th>
+                  <th>Last Close</th>
+                  <th>Signal Candle Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for stock in result.matches %}
+                <tr>
+                  <td>{{ stock.symbol }}</td>
+                  <td>{{ stock.name }}</td>
+                  <td>{{ stock.close }}</td>
+                  <td>{{ stock.signal_time }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+            <p>No symbols currently match all selected indicator buy signals.</p>
           {% endif %}
         {% else %}
           <p><strong>Scan universe:</strong> Russell 1000 (Yahoo Finance)</p>
@@ -331,29 +366,29 @@ function syncIntervals() {
 }
 
 function syncRunMode() {
-  const scanMode = runModeEl.value === 'scan';
-  if (scanMode) {
+  const universeMode = runModeEl.value === 'scan' || runModeEl.value === 'find';
+  if (universeMode) {
     providerEl.value = 'yahoo';
   }
-  const isAlpha = providerEl.value === 'alpha' && !scanMode;
+  const isAlpha = providerEl.value === 'alpha' && !universeMode;
   apiKeyInput.required = isAlpha;
   apiKeyInput.disabled = !isAlpha;
-  tickerInput.required = !scanMode;
-  tickerInput.disabled = scanMode;
-  scanLimitWrap.style.display = scanMode ? 'grid' : 'none';
+  tickerInput.required = !universeMode;
+  tickerInput.disabled = universeMode;
+  scanLimitWrap.style.display = universeMode ? 'grid' : 'none';
 
-  positionModeWrap.style.display = scanMode ? 'none' : 'grid';
-  tradeCategoryWrap.style.display = scanMode ? 'none' : 'grid';
-  stopLossModeWrap.style.display = scanMode ? 'none' : 'grid';
-  stopLossPercentWrap.style.display = scanMode ? 'none' : 'grid';
-  trailingStopWrap.style.display = scanMode ? 'none' : 'grid';
+  positionModeWrap.style.display = universeMode ? 'none' : 'grid';
+  tradeCategoryWrap.style.display = universeMode ? 'none' : 'grid';
+  stopLossModeWrap.style.display = universeMode ? 'none' : 'grid';
+  stopLossPercentWrap.style.display = universeMode ? 'none' : 'grid';
+  trailingStopWrap.style.display = universeMode ? 'none' : 'grid';
 }
 
 providerEl.addEventListener('change', syncModes);
 modeEl.addEventListener('change', syncIntervals);
 runModeEl.addEventListener('change', () => { syncModes(); syncRunMode(); });
 formEl.addEventListener('submit', () => {
-  if (runModeEl.value === 'scan') {
+  if (runModeEl.value === 'scan' || runModeEl.value === 'find') {
     startScanProgress();
   }
 });
