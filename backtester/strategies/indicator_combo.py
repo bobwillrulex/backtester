@@ -68,11 +68,24 @@ def run_indicator_combo(
         open_entries = []
 
     for i in range(1, len(data)):
+        # Returns from close[i-1] -> close[i] belong to the position state carried into candle i.
+        # Signals on candle i are acted on at candle i close and only affect subsequent bars.
+        leverage = open_positions if allow_multiple_positions else min(open_positions, 1)
+        current = equity[-1] * (1 + leverage * data["ret"].iloc[i])
+        equity.append(max(current, 0.0))
+
         if not hold_overnight and open_positions > 0 and data.index[i].date() != data.index[i - 1].date():
             close_all_positions(
                 exit_price=float(data["close"].iloc[i - 1]),
                 exit_time=data.index[i - 1].isoformat(),
                 exit_index=i - 1,
+            )
+
+        if bearish_any.iloc[i] and open_positions > 0:
+            close_all_positions(
+                exit_price=float(data["close"].iloc[i]),
+                exit_time=data.index[i].isoformat(),
+                exit_index=i,
             )
 
         if bullish_all.iloc[i] and open_positions < max_positions:
@@ -85,17 +98,6 @@ def run_indicator_combo(
                     "entry_price": round(float(data["close"].iloc[i]), 4),
                 }
             )
-
-        if bearish_any.iloc[i] and open_positions > 0:
-            close_all_positions(
-                exit_price=float(data["close"].iloc[i]),
-                exit_time=data.index[i].isoformat(),
-                exit_index=i,
-            )
-
-        leverage = open_positions if allow_multiple_positions else min(open_positions, 1)
-        current = equity[-1] * (1 + leverage * data["ret"].iloc[i])
-        equity.append(max(current, 0.0))
 
         if open_positions == 0:
             last_flat_equity = equity[-1]
