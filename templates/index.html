@@ -53,6 +53,26 @@
         </select>
       </label>
 
+      <label>Stop-Loss Mode
+        <select name="stop_loss_mode">
+          <option value="none" {% if form_data.stop_loss_mode == 'none' %}selected{% endif %}>None</option>
+          <option value="percent" {% if form_data.stop_loss_mode == 'percent' %}selected{% endif %}>Fixed %</option>
+          <option value="support_resistance" {% if form_data.stop_loss_mode == 'support_resistance' %}selected{% endif %}>Support/Resistance</option>
+          <option value="ichimoku" {% if form_data.stop_loss_mode == 'ichimoku' %}selected{% endif %}>Ichimoku</option>
+          <option value="vwap" {% if form_data.stop_loss_mode == 'vwap' %}selected{% endif %}>VWAP</option>
+          <option value="ema" {% if form_data.stop_loss_mode == 'ema' %}selected{% endif %}>EMA</option>
+        </select>
+      </label>
+
+      <label>Stop-Loss % (used when mode = Fixed %)
+        <input type="number" name="stop_loss_percent" min="0.1" max="99" step="0.1" value="{{ form_data.stop_loss_percent }}" required />
+      </label>
+
+      <label>
+        <input type="checkbox" name="trailing_stop" {% if form_data.trailing_stop %}checked{% endif %}/>
+        Enable trailing stop-loss
+      </label>
+
       <fieldset>
         <legend>Indicators / Strategies (select one or more)</legend>
         <div class="checkbox-grid">
@@ -85,6 +105,8 @@
         <p><strong>Win Rate:</strong> {{ result.win_rate_pct }}%</p>
         <p><strong>Average Gain per Trade:</strong> {{ result.average_gain_pct }}%</p>
         <p><strong>Indicators:</strong> {{ result.indicators|join(', ') }}</p>
+        <p><strong>Stop-Loss:</strong> {{ result.stop_loss_mode }}{% if result.stop_loss_mode == "percent" %} ({{ result.stop_loss_percent }}%){% endif %}</p>
+        <p><strong>Trailing Stop:</strong> {{ "Enabled" if result.trailing_stop else "Disabled" }}</p>
         <p><strong>Logic:</strong> {{ result.notes }}</p>
 
         {% if result.trade_details %}
@@ -98,6 +120,8 @@
                   <th>Exit Time</th>
                   <th>Entry</th>
                   <th>Exit</th>
+                  <th>Stop Loss</th>
+                  <th>Exit Reason</th>
                   <th>PnL %</th>
                   <th>Bars Held</th>
                 </tr>
@@ -109,6 +133,8 @@
                   <td>{{ trade.exit_time }}</td>
                   <td>{{ trade.entry_price }}</td>
                   <td>{{ trade.exit_price }}</td>
+                  <td>{{ trade.stop_loss if trade.stop_loss is not none else '-' }}</td>
+                  <td>{{ trade.exit_reason }}</td>
                   <td class="{% if trade.pnl_pct >= 0 %}pnl-pos{% else %}pnl-neg{% endif %}">{{ trade.pnl_pct }}%</td>
                   <td>{{ trade.holding_candles }}</td>
                 </tr>
