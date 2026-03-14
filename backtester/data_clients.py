@@ -193,28 +193,31 @@ class Russell1000Client:
     )
 
     def fetch_symbols(self) -> list[str]:
+        return [item["symbol"] for item in self.fetch_constituents()]
+
+    def fetch_constituents(self) -> list[dict[str, str]]:
         try:
-            symbols = self._from_wikipedia()
-            if symbols:
-                return symbols
+            constituents = self._from_wikipedia()
+            if constituents:
+                return constituents
         except DataClientError:
             pass
 
-        symbols = self._from_ishares()
-        if symbols:
-            return symbols
+        constituents = self._from_ishares()
+        if constituents:
+            return constituents
 
         raise DataClientError("Could not load Russell 1000 constituents from available sources.")
 
-    def _from_wikipedia(self) -> list[str]:
+    def _from_wikipedia(self) -> list[dict[str, str]]:
         try:
             tables = pd.read_html(self.WIKI_URL)
         except Exception as exc:  # pandas can raise multiple parser/network errors
             raise DataClientError(f"Failed to fetch Russell 1000 symbols from Wikipedia: {exc}") from exc
 
-        return self._extract_symbols_from_tables(tables)
+        return self._extract_constituents_from_tables(tables)
 
-    def _from_ishares(self) -> list[str]:
+    def _from_ishares(self) -> list[dict[str, str]]:
         try:
             response = requests.get(self.ISHARES_URL, timeout=30)
             response.raise_for_status()
@@ -230,32 +233,71 @@ class Russell1000Client:
         if "Ticker" not in table.columns:
             raise DataClientError("iShares holdings CSV missing Ticker column.")
 
-        symbols = (
-            table["Ticker"]
-            .dropna()
+        name_col = next((c for c in table.columns if str(c).strip().lower() in {"name", "security", "issuer"}), None)
+
+        data = table[["Ticker"] + ([name_col] if name_col else [])].copy()
+        data["Ticker"] = (
+            data["Ticker"]
+            .fillna("")
             .astype(str)
             .str.strip()
             .str.upper()
             .str.replace(".", "-", regex=False)
         )
-        return sorted({sym for sym in symbols if sym and sym != "NAN"})
+        if name_col:
+            data[name_col] = data[name_col].fillna("").astype(str).str.strip()
+
+        constituents: dict[str, str] = {}
+        for _, row in data.iterrows():
+            symbol = row["Ticker"]
+            if not symbol or symbol == "NAN":
+                continue
+            company_name = row[name_col] if name_col else ""
+            constituents[symbol] = company_name
+
+        return [
+            {"symbol": symbol, "name": constituents[symbol]}
+            for symbol in sorted(constituents.keys())
+        ]
 
     @staticmethod
-    def _extract_symbols_from_tables(tables: list[pd.DataFrame]) -> list[str]:
+    def _extract_constituents_from_tables(tables: list[pd.DataFrame]) -> list[dict[str, str]]:
         for table in tables:
             columns = {str(col).strip().lower(): col for col in table.columns}
             symbol_col = columns.get("symbol") or columns.get("ticker")
             if symbol_col is None:
                 continue
+
+            name_col = (
+                columns.get("company")
+                or columns.get("company name")
+                or columns.get("name")
+                or columns.get("security")
+            )
+
             symbols = (
                 table[symbol_col]
-                .dropna()
+                .fillna("")
                 .astype(str)
                 .str.strip()
                 .str.upper()
                 .str.replace(".", "-", regex=False)
             )
-            unique = sorted({sym for sym in symbols if sym and sym != "NAN"})
-            if unique:
-                return unique
+
+            names: list[str]
+            if name_col is not None:
+                names = table[name_col].fillna("").astype(str).str.strip().tolist()
+            else:
+                names = [""] * len(table)
+
+            constituents: dict[str, str] = {}
+            for symbol, name in zip(symbols.tolist(), names):
+                if symbol and symbol != "NAN":
+                    constituents[symbol] = name
+
+            if constituents:
+                return [
+                    {"symbol": symbol, "name": constituents[symbol]}
+                    for symbol in sorted(constituents.keys())
+                ]
         return []
