@@ -41,6 +41,9 @@ def render_home(*, result=None, error=None, api_key=DEFAULT_API_KEY, requests_re
         "position_mode": "single",
         "trade_category": "none",
         "indicators": ["fair_value_gap"],
+        "stop_loss_mode": "none",
+        "stop_loss_percent": 2.0,
+        "trailing_stop": False,
     }
     return render_template(
         "index.html",
@@ -70,6 +73,9 @@ def run_backtest():
     position_mode = request.form.get("position_mode", "single")
     trade_category = request.form.get("trade_category", "none")
     api_key = request.form.get("api_key", "").strip() or DEFAULT_API_KEY
+    stop_loss_mode = request.form.get("stop_loss_mode", "none")
+    stop_loss_percent = float(request.form.get("stop_loss_percent", "2") or "2")
+    trailing_stop = request.form.get("trailing_stop") == "on"
     form_data = {
         "provider": provider,
         "data_mode": data_mode,
@@ -79,6 +85,9 @@ def run_backtest():
         "position_mode": position_mode,
         "trade_category": trade_category,
         "indicators": selected_indicators,
+        "stop_loss_mode": stop_loss_mode,
+        "stop_loss_percent": stop_loss_percent,
+        "trailing_stop": trailing_stop,
     }
 
     local_alpha_client = AlphaVantageClient(api_key=api_key)
@@ -95,6 +104,10 @@ def run_backtest():
             raise ValueError("Invalid candle interval for selected provider/mode.")
         if trade_category not in {"none", "day"}:
             raise ValueError("Invalid trade category selected.")
+        if stop_loss_mode not in {"none", "percent", "support_resistance", "ichimoku", "vwap", "ema"}:
+            raise ValueError("Invalid stop-loss mode selected.")
+        if stop_loss_percent <= 0 or stop_loss_percent >= 100:
+            raise ValueError("Stop-loss percent must be between 0 and 100.")
 
         req = CandleRequest(
             symbol=ticker,
@@ -116,6 +129,9 @@ def run_backtest():
             selected_indicators=selected_indicators,
             allow_multiple_positions=(position_mode == "multi"),
             hold_overnight=(trade_category == "none"),
+            stop_loss_mode=stop_loss_mode,
+            stop_loss_percent=stop_loss_percent,
+            trailing_stop=trailing_stop,
         )
 
         return render_home(
@@ -134,6 +150,9 @@ def run_backtest():
                 "average_gain_pct": result.average_gain_pct,
                 "notes": result.notes,
                 "indicators": [INDICATORS[i] for i in selected_indicators],
+                "stop_loss_mode": stop_loss_mode,
+                "stop_loss_percent": round(stop_loss_percent, 2),
+                "trailing_stop": trailing_stop,
                 "trade_details": result.trade_details,
             },
         )

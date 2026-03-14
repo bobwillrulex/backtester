@@ -25,12 +25,16 @@ def run_indicator_combo(
     selected_indicators: list[str],
     allow_multiple_positions: bool,
     hold_overnight: bool = True,
+    stop_loss_mode: str = "none",
+    stop_loss_percent: float = 2.0,
+    trailing_stop: bool = False,
 ) -> BacktestResult:
     if not selected_indicators:
         raise ValueError("Select at least one indicator.")
 
     data = candles.copy()
     data["ret"] = data["close"].pct_change().fillna(0.0)
+    stop_refs = _build_stop_reference_series(data)
     bullish_map: dict[str, pd.Series] = {}
     bearish_map: dict[str, pd.Series] = {}
 
@@ -44,11 +48,11 @@ def run_indicator_combo(
     max_positions = 5 if allow_multiple_positions else 1
     equity = [1.0]
     trades = 0
-    open_entries: list[dict[str, float | int | str]] = []
+    open_entries: list[dict[str, float | int | str | None]] = []
     closed_trades: list[dict[str, float | int | str]] = []
     last_flat_equity = 1.0
 
-    def close_all_positions(*, exit_price: float, exit_time: str, exit_index: int) -> None:
+    def close_all_positions(*, exit_price: float, exit_time: str, exit_index: int, reason: str) -> None:
         nonlocal open_entries, open_positions
         for entry in open_entries:
             entry_price = float(entry["entry_price"])
@@ -59,6 +63,8 @@ def run_indicator_combo(
                     "exit_time": exit_time,
                     "entry_price": entry_price,
                     "exit_price": round(exit_price, 4),
+                    "stop_loss": entry["stop_loss"] if entry["stop_loss"] is None else round(float(entry["stop_loss"]), 4),
+                    "exit_reason": reason,
                     "pnl_pct": round(pnl_pct, 2),
                     "holding_candles": exit_index - int(entry["entry_index"]),
                 }
@@ -66,6 +72,62 @@ def run_indicator_combo(
 
         open_positions = 0
         open_entries = []
+
+    def stop_price_at_index(*, entry_price: float, i: int) -> float | None:
+        if stop_loss_mode == "none":
+            return None
+        if stop_loss_mode == "percent":
+            return entry_price * (1 - stop_loss_percent / 100)
+        ref_series = stop_refs.get(stop_loss_mode)
+        if ref_series is None:
+            return None
+        ref_value = ref_series.iloc[i]
+        if pd.isna(ref_value):
+            return None
+        # Keep stop strictly below entry to avoid immediate invalidation.
+        return min(float(ref_value), entry_price * 0.999)
+
+    def try_stop_loss_exit(i: int) -> bool:
+        nonlocal open_entries, open_positions
+        if open_positions == 0:
+            return False
+
+        remaining: list[dict[str, float | int | str | None]] = []
+        exited = False
+        for entry in open_entries:
+            candidate = stop_price_at_index(entry_price=float(entry["entry_price"]), i=i)
+            if candidate is not None:
+                if entry.get("stop_loss") is None:
+                    entry["stop_loss"] = candidate
+                elif trailing_stop:
+                    entry["stop_loss"] = max(float(entry["stop_loss"]), candidate)
+                else:
+                    entry["stop_loss"] = candidate
+
+            stop_value = entry.get("stop_loss")
+            if stop_value is not None and float(data["low"].iloc[i]) <= float(stop_value):
+                exit_price = min(float(data["close"].iloc[i]), float(stop_value))
+                entry_price = float(entry["entry_price"])
+                pnl_pct = ((exit_price / entry_price) - 1) * 100
+                closed_trades.append(
+                    {
+                        "entry_time": entry["entry_time"],
+                        "exit_time": _format_trade_time(data.index[i]),
+                        "entry_price": entry_price,
+                        "exit_price": round(exit_price, 4),
+                        "stop_loss": round(float(stop_value), 4),
+                        "exit_reason": "stop_loss",
+                        "pnl_pct": round(pnl_pct, 2),
+                        "holding_candles": i - int(entry["entry_index"]),
+                    }
+                )
+                open_positions -= 1
+                exited = True
+            else:
+                remaining.append(entry)
+
+        open_entries = remaining
+        return exited
 
     for i in range(1, len(data)):
         # Returns from close[i-1] -> close[i] belong to the position state carried into candle i.
@@ -77,15 +139,19 @@ def run_indicator_combo(
         if not hold_overnight and open_positions > 0 and data.index[i].date() != data.index[i - 1].date():
             close_all_positions(
                 exit_price=float(data["close"].iloc[i - 1]),
-                exit_time=data.index[i - 1].isoformat(),
+                exit_time=_format_trade_time(data.index[i - 1]),
                 exit_index=i - 1,
+                reason="day_close",
             )
+
+        try_stop_loss_exit(i)
 
         if bearish_any.iloc[i] and open_positions > 0:
             close_all_positions(
                 exit_price=float(data["close"].iloc[i]),
-                exit_time=data.index[i].isoformat(),
+                exit_time=_format_trade_time(data.index[i]),
                 exit_index=i,
+                reason="signal_exit",
             )
 
         if bullish_all.iloc[i] and open_positions < max_positions:
@@ -94,8 +160,9 @@ def run_indicator_combo(
             open_entries.append(
                 {
                     "entry_index": i,
-                    "entry_time": data.index[i].isoformat(),
+                    "entry_time": _format_trade_time(data.index[i]),
                     "entry_price": round(float(data["close"].iloc[i]), 4),
+                    "stop_loss": stop_price_at_index(entry_price=float(data["close"].iloc[i]), i=i),
                 }
             )
 
@@ -121,6 +188,12 @@ def run_indicator_combo(
     )
     if not hold_overnight:
         notes += " Open trades are also closed at each day boundary to avoid overnight holds."
+    if stop_loss_mode != "none":
+        notes += f" Stop loss mode: {stop_loss_mode}."
+        if stop_loss_mode == "percent":
+            notes += f" Percent stop: {stop_loss_percent:.2f}%."
+        if trailing_stop:
+            notes += " Trailing stop is enabled."
     gains = [float(t["pnl_pct"]) for t in closed_trades]
     winning = [g for g in gains if g > 0]
     win_rate_pct = (len(winning) / len(gains) * 100) if gains else 0.0
@@ -170,10 +243,21 @@ def _indicator_signals(data: pd.DataFrame, indicator: str) -> tuple[pd.Series, p
         bullish = close < lower
         bearish = close > upper
     elif indicator == "support_resistance":
-        support = low.rolling(20).min()
-        resistance = high.rolling(20).max()
-        bullish = close <= support * 1.01
-        bearish = close >= resistance * 0.99
+        support = low.rolling(30).quantile(0.2)
+        resistance = high.rolling(30).quantile(0.8)
+        tolerance = 0.0075
+
+        support_touch = (low <= support * (1 + tolerance)) & (close >= support * (1 - tolerance))
+        resistance_touch = (high >= resistance * (1 - tolerance)) & (close <= resistance * (1 + tolerance))
+        support_touches = support_touch.rolling(30, min_periods=1).sum()
+        resistance_touches = resistance_touch.rolling(30, min_periods=1).sum()
+
+        bounce = support_touch & (close > close.shift(1))
+        breakout = close > resistance * (1 + tolerance)
+        breakdown = close < support * (1 - tolerance)
+
+        bullish = ((support_touches >= 2) & bounce) | breakout
+        bearish = ((resistance_touches >= 2) & resistance_touch & (close < close.shift(1))) | breakdown
     elif indicator == "fibonacci":
         swing_high = high.rolling(50).max()
         swing_low = low.rolling(50).min()
@@ -225,3 +309,37 @@ def _rsi(series: pd.Series, period: int = 14) -> pd.Series:
     loss = -delta.clip(upper=0).rolling(period).mean()
     rs = gain / loss.replace(0, pd.NA)
     return (100 - (100 / (1 + rs))).fillna(50)
+
+
+def _build_stop_reference_series(data: pd.DataFrame) -> dict[str, pd.Series]:
+    close = data["close"]
+    high = data["high"]
+    low = data["low"]
+    volume = data["volume"].replace(0, pd.NA).ffill().fillna(1.0)
+
+    ema_slow = close.ewm(span=26, adjust=False).mean()
+
+    typical = (high + low + close) / 3
+    vwap = (typical * volume).cumsum() / volume.cumsum()
+
+    support = low.rolling(30).quantile(0.2)
+
+    conv = (high.rolling(9).max() + low.rolling(9).min()) / 2
+    base = (high.rolling(26).max() + low.rolling(26).min()) / 2
+    span_a = ((conv + base) / 2).shift(26)
+    span_b = ((high.rolling(52).max() + low.rolling(52).min()) / 2).shift(26)
+    ichimoku_floor = pd.concat([span_a, span_b, base], axis=1).min(axis=1)
+
+    return {
+        "support_resistance": support,
+        "ichimoku": ichimoku_floor,
+        "vwap": vwap,
+        "ema": ema_slow,
+    }
+
+
+def _format_trade_time(ts: pd.Timestamp) -> str:
+    stamp = pd.Timestamp(ts)
+    if stamp.tzinfo is not None:
+        stamp = stamp.tz_convert(None)
+    return stamp.strftime("%Y-%m-%dT%H:%M:%S")
