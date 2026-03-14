@@ -209,12 +209,13 @@ def run_backtest():
                 },
             )
 
-        symbols = russell_client.fetch_symbols()
-        candidates = symbols[:scan_limit]
+        constituents = russell_client.fetch_constituents()
+        candidates = constituents[:scan_limit]
         matches: list[dict[str, float | int | str]] = []
         failures = 0
 
-        for symbol in candidates:
+        for stock in candidates:
+            symbol = stock["symbol"]
             try:
                 candles = yahoo_client.fetch_candles(
                     CandleRequest(
@@ -246,6 +247,7 @@ def run_backtest():
                     matches.append(
                         {
                             "symbol": symbol,
+                            "name": stock.get("name") or "-",
                             "return_pct": scan_result.total_return_pct,
                             "trades": scan_result.trades,
                             **metrics,

@@ -11,7 +11,7 @@
     <h1>Backtester</h1>
     <p class="sub">Alpha Vantage requests remaining this session: <strong>{{ requests_remaining }}</strong>/25</p>
 
-    <form method="post" action="/backtest" class="card">
+    <form method="post" action="/backtest" class="card" id="backtest-form">
       <label>Run Mode
         <select name="run_mode" id="run_mode">
           <option value="backtest" {% if form_data.run_mode == 'backtest' %}selected{% endif %}>Backtest a single ticker</option>
@@ -175,6 +175,7 @@
               <thead>
                 <tr>
                   <th>Symbol</th>
+                  <th>Name</th>
                   <th>Return %</th>
                   <th>Win Rate %</th>
                   <th>Profit Factor</th>
@@ -189,6 +190,7 @@
                 {% for stock in result.matches %}
                 <tr>
                   <td>{{ stock.symbol }}</td>
+                  <td>{{ stock.name }}</td>
                   <td class="{% if stock.return_pct >= 0 %}pnl-pos{% else %}pnl-neg{% endif %}">{{ stock.return_pct }}</td>
                   <td>{{ stock.win_rate_pct }}</td>
                   <td>{{ stock.profit_factor }}</td>
@@ -210,8 +212,20 @@
     {% endif %}
   </main>
 
+  <div id="scan-loading" class="scan-loading" aria-live="polite" hidden>
+    <div class="scan-loading-card">
+      <h3>Scanning stocks...</h3>
+      <p id="scan-progress-label">Preparing scan...</p>
+      <div class="progress-track">
+        <div id="scan-progress-bar" class="progress-bar"></div>
+      </div>
+      <p id="scan-progress-time" class="scan-progress-time">Estimated time remaining: calculating...</p>
+    </div>
+  </div>
+
 <script>
 const options = {{ interval_options|tojson }};
+const formEl = document.getElementById('backtest-form');
 const providerEl = document.getElementById('provider');
 const modeEl = document.getElementById('data_mode');
 const intervalEl = document.getElementById('interval');
@@ -224,6 +238,52 @@ const tradeCategoryWrap = document.getElementById('trade_category_wrap');
 const stopLossModeWrap = document.getElementById('stop_loss_mode_wrap');
 const stopLossPercentWrap = document.getElementById('stop_loss_percent_wrap');
 const trailingStopWrap = document.getElementById('trailing_stop_wrap');
+const scanLoadingEl = document.getElementById('scan-loading');
+const progressBarEl = document.getElementById('scan-progress-bar');
+const progressLabelEl = document.getElementById('scan-progress-label');
+const progressTimeEl = document.getElementById('scan-progress-time');
+
+let scanProgressTimer = null;
+
+function formatDuration(totalSeconds) {
+  const seconds = Math.max(0, Math.round(totalSeconds));
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  if (mins > 0) {
+    return `${mins}m ${secs}s`;
+  }
+  return `${secs}s`;
+}
+
+function startScanProgress() {
+  if (scanProgressTimer) {
+    window.clearInterval(scanProgressTimer);
+    scanProgressTimer = null;
+  }
+
+  const scanLimitInput = document.querySelector('input[name="scan_limit"]');
+  const total = Number.parseInt(scanLimitInput?.value || '100', 10) || 100;
+  const secondsPerSymbol = 1.3;
+  const estimatedTotalSeconds = Math.max(8, total * secondsPerSymbol);
+  const startedAt = Date.now();
+
+  scanLoadingEl.hidden = false;
+  progressBarEl.style.width = '0%';
+
+  const tick = () => {
+    const elapsedSeconds = (Date.now() - startedAt) / 1000;
+    const doneRatio = Math.min(elapsedSeconds / estimatedTotalSeconds, 0.98);
+    const processed = Math.min(total, Math.max(1, Math.floor(doneRatio * total)));
+    const remaining = Math.max(0, estimatedTotalSeconds - elapsedSeconds);
+
+    progressBarEl.style.width = `${Math.floor(doneRatio * 100)}%`;
+    progressLabelEl.textContent = `Scanning stock ${processed} of ${total}`;
+    progressTimeEl.textContent = `Estimated time remaining: ${formatDuration(remaining)}`;
+  };
+
+  tick();
+  scanProgressTimer = window.setInterval(tick, 250);
+}
 
 function syncModes() {
   const provider = providerEl.value;
@@ -292,6 +352,11 @@ function syncRunMode() {
 providerEl.addEventListener('change', syncModes);
 modeEl.addEventListener('change', syncIntervals);
 runModeEl.addEventListener('change', () => { syncModes(); syncRunMode(); });
+formEl.addEventListener('submit', () => {
+  if (runModeEl.value === 'scan') {
+    startScanProgress();
+  }
+});
 syncModes();
 syncRunMode();
 </script>
