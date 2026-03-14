@@ -40,8 +40,11 @@ class FairValueGapStrategy(Strategy):
             "Bearish FVG (candle high below low from two candles back) closes all positions."
         )
 
+        rounded_total = round(float(total_return_pct), 2)
         return BacktestResult(
-            total_return_pct=round(float(total_return_pct), 2),
+            total_return_pct=rounded_total,
+            previous_return_pct=rounded_total,
+            liquidated_return_pct=rounded_total,
             trades=trades,
             equity_curve=equity_curve,
             notes=notes,

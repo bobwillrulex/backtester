@@ -78,7 +78,9 @@
         <p><strong>Ticker:</strong> {{ result.ticker }}</p>
         <p><strong>Provider:</strong> {{ result.provider }}</p>
         <p><strong>Candles used:</strong> {{ result.candles }}</p>
-        <p><strong>Total Return:</strong> {{ result.return_pct }}%</p>
+        <p><strong>Total Return (Current Equity):</strong> {{ result.return_pct }}%</p>
+        <p><strong>Total Return (Previous Flat):</strong> {{ result.previous_return_pct }}%</p>
+        <p><strong>Total Return (Liquidated):</strong> {{ result.liquidated_return_pct }}%</p>
         <p><strong>Trades:</strong> {{ result.trades }}</p>
         <p><strong>Win Rate:</strong> {{ result.win_rate_pct }}%</p>
         <p><strong>Average Gain per Trade:</strong> {{ result.average_gain_pct }}%</p>

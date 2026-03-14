@@ -12,6 +12,8 @@ class BacktestResult:
     trades: int
     equity_curve: pd.Series
     notes: str
+    previous_return_pct: float = 0.0
+    liquidated_return_pct: float = 0.0
     win_rate_pct: float = 0.0
     average_gain_pct: float = 0.0
     trade_details: list[dict[str, str | float | int]] = field(default_factory=list)
