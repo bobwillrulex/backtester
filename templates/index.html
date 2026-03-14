@@ -12,6 +12,13 @@
     <p class="sub">Alpha Vantage requests remaining this session: <strong>{{ requests_remaining }}</strong>/25</p>
 
     <form method="post" action="/backtest" class="card">
+      <label>Run Mode
+        <select name="run_mode" id="run_mode">
+          <option value="backtest" {% if form_data.run_mode == 'backtest' %}selected{% endif %}>Backtest a single ticker</option>
+          <option value="scan" {% if form_data.run_mode == 'scan' %}selected{% endif %}>Find stocks in Russell 1000</option>
+        </select>
+      </label>
+
       <label>Data Provider
         <select id="provider" name="provider">
           <option value="alpha" {% if form_data.provider == 'alpha' %}selected{% endif %}>Alpha Vantage</option>
@@ -24,7 +31,7 @@
       </label>
 
       <label>Ticker
-        <input type="text" name="ticker" placeholder="NVDA" value="{{ form_data.ticker }}" required />
+        <input type="text" id="ticker" name="ticker" placeholder="NVDA" value="{{ form_data.ticker }}" required />
       </label>
 
       <label>Candle Type
@@ -37,6 +44,10 @@
 
       <label>Lookback (days)
         <input type="number" name="lookback_days" min="5" value="{{ form_data.lookback_days }}" required />
+      </label>
+
+      <label id="scan_limit_wrap">Scan Limit (Russell symbols to evaluate)
+        <input type="number" name="scan_limit" min="1" max="1000" value="{{ form_data.scan_limit }}" required />
       </label>
 
       <label>Position Mode
@@ -74,6 +85,18 @@
       </label>
 
       <fieldset>
+        <legend>Metric filters (applies to "Find stocks" mode)</legend>
+        <div class="metric-grid">
+          <label>Min Win Rate %<input type="number" name="min_win_rate" min="0" max="100" step="0.1" value="{{ form_data.min_win_rate }}" /></label>
+          <label>Min Profit Factor<input type="number" name="min_profit_factor" min="0" step="0.1" value="{{ form_data.min_profit_factor }}" /></label>
+          <label>Min Sharpe Ratio<input type="number" name="min_sharpe_ratio" min="0" step="0.1" value="{{ form_data.min_sharpe_ratio }}" /></label>
+          <label>Min Quality Score<input type="number" name="min_quality_score" min="0" max="100" step="0.1" value="{{ form_data.min_quality_score }}" /></label>
+          <label>Max Drawdown %<input type="number" name="max_drawdown" min="0" max="100" step="0.1" value="{{ form_data.max_drawdown }}" /></label>
+          <label>Max Volatility %<input type="number" name="max_volatility" min="0" max="100" step="0.1" value="{{ form_data.max_volatility }}" /></label>
+        </div>
+      </fieldset>
+
+      <fieldset>
         <legend>Indicators / Strategies (select one or more)</legend>
         <div class="checkbox-grid">
           {% for key, label in indicator_options.items() %}
@@ -85,7 +108,7 @@
         </div>
       </fieldset>
 
-      <button type="submit">Run Backtest</button>
+      <button type="submit">Run</button>
     </form>
 
     {% if error %}
@@ -95,54 +118,105 @@
     {% if result %}
       <section class="card result">
         <h2>Result</h2>
-        <p><strong>Ticker:</strong> {{ result.ticker }}</p>
-        <p><strong>Provider:</strong> {{ result.provider }}</p>
-        <p><strong>Candles used:</strong> {{ result.candles }}</p>
-        <p><strong>Total Return (Current Equity):</strong> {{ result.return_pct }}%</p>
-        <p><strong>Total Return (Previous Flat):</strong> {{ result.previous_return_pct }}%</p>
-        <p><strong>Total Return (Liquidated):</strong> {{ result.liquidated_return_pct }}%</p>
-        <p><strong>Trades:</strong> {{ result.trades }}</p>
-        <p><strong>Win Rate:</strong> {{ result.win_rate_pct }}%</p>
-        <p><strong>Average Gain per Trade:</strong> {{ result.average_gain_pct }}%</p>
-        <p><strong>Indicators:</strong> {{ result.indicators|join(', ') }}</p>
-        <p><strong>Stop-Loss:</strong> {{ result.stop_loss_mode }}{% if result.stop_loss_mode == "percent" %} ({{ result.stop_loss_percent }}%){% endif %}</p>
-        <p><strong>Trailing Stop:</strong> {{ "Enabled" if result.trailing_stop else "Disabled" }}</p>
-        <p><strong>Logic:</strong> {{ result.notes }}</p>
 
-        {% if result.trade_details %}
-        <details>
-          <summary>View more details ({{ result.trade_details|length }} closed trades)</summary>
+        {% if result.mode == 'backtest' %}
+          <p><strong>Ticker:</strong> {{ result.ticker }}</p>
+          <p><strong>Provider:</strong> {{ result.provider }}</p>
+          <p><strong>Candles used:</strong> {{ result.candles }}</p>
+          <p><strong>Total Return (Current Equity):</strong> {{ result.return_pct }}%</p>
+          <p><strong>Total Return (Previous Flat):</strong> {{ result.previous_return_pct }}%</p>
+          <p><strong>Total Return (Liquidated):</strong> {{ result.liquidated_return_pct }}%</p>
+          <p><strong>Trades:</strong> {{ result.trades }}</p>
+          <p><strong>Win Rate:</strong> {{ result.win_rate_pct }}%</p>
+          <p><strong>Profit Factor:</strong> {{ result.profit_factor }}</p>
+          <p><strong>Sharpe Ratio:</strong> {{ result.sharpe_ratio }}</p>
+          <p><strong>Volatility:</strong> {{ result.volatility_pct }}%</p>
+          <p><strong>Max Drawdown:</strong> {{ result.max_drawdown_pct }}%</p>
+          <p><strong>Quality Score:</strong> {{ result.quality_score }}/100</p>
+          <p><strong>Average Gain per Trade:</strong> {{ result.average_gain_pct }}%</p>
+          <p><strong>Indicators:</strong> {{ result.indicators|join(', ') }}</p>
+          <p><strong>Stop-Loss:</strong> {{ result.stop_loss_mode }}{% if result.stop_loss_mode == "percent" %} ({{ result.stop_loss_percent }}%){% endif %}</p>
+          <p><strong>Trailing Stop:</strong> {{ "Enabled" if result.trailing_stop else "Disabled" }}</p>
+          <p><strong>Logic:</strong> {{ result.notes }}</p>
+
+          {% if result.trade_details %}
+          <details>
+            <summary>View more details ({{ result.trade_details|length }} closed trades)</summary>
+            <div class="trade-table-wrap">
+              <table class="trade-table">
+                <thead>
+                  <tr>
+                    <th>Entry Time</th>
+                    <th>Exit Time</th>
+                    <th>Entry</th>
+                    <th>Exit</th>
+                    <th>Stop Loss</th>
+                    <th>Exit Reason</th>
+                    <th>PnL %</th>
+                    <th>Bars Held</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for trade in result.trade_details %}
+                  <tr>
+                    <td>{{ trade.entry_time }}</td>
+                    <td>{{ trade.exit_time }}</td>
+                    <td>{{ trade.entry_price }}</td>
+                    <td>{{ trade.exit_price }}</td>
+                    <td>{{ trade.stop_loss if trade.stop_loss is not none else '-' }}</td>
+                    <td>{{ trade.exit_reason }}</td>
+                    <td class="{% if trade.pnl_pct >= 0 %}pnl-pos{% else %}pnl-neg{% endif %}">{{ trade.pnl_pct }}%</td>
+                    <td>{{ trade.holding_candles }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </details>
+          {% endif %}
+        {% else %}
+          <p><strong>Scan universe:</strong> Russell 1000 (Yahoo Finance)</p>
+          <p><strong>Indicators:</strong> {{ result.indicators|join(', ') }}</p>
+          <p><strong>Symbols scanned:</strong> {{ result.scan_total }}</p>
+          <p><strong>Matched:</strong> {{ result.scan_matches }}</p>
+          <p><strong>Skipped (data/errors):</strong> {{ result.scan_failures }}</p>
+
+          {% if result.matches %}
           <div class="trade-table-wrap">
             <table class="trade-table">
               <thead>
                 <tr>
-                  <th>Entry Time</th>
-                  <th>Exit Time</th>
-                  <th>Entry</th>
-                  <th>Exit</th>
-                  <th>Stop Loss</th>
-                  <th>Exit Reason</th>
-                  <th>PnL %</th>
-                  <th>Bars Held</th>
+                  <th>Symbol</th>
+                  <th>Return %</th>
+                  <th>Win Rate %</th>
+                  <th>Profit Factor</th>
+                  <th>Sharpe</th>
+                  <th>Volatility %</th>
+                  <th>Max DD %</th>
+                  <th>Quality</th>
+                  <th>Trades</th>
                 </tr>
               </thead>
               <tbody>
-                {% for trade in result.trade_details %}
+                {% for stock in result.matches %}
                 <tr>
-                  <td>{{ trade.entry_time }}</td>
-                  <td>{{ trade.exit_time }}</td>
-                  <td>{{ trade.entry_price }}</td>
-                  <td>{{ trade.exit_price }}</td>
-                  <td>{{ trade.stop_loss if trade.stop_loss is not none else '-' }}</td>
-                  <td>{{ trade.exit_reason }}</td>
-                  <td class="{% if trade.pnl_pct >= 0 %}pnl-pos{% else %}pnl-neg{% endif %}">{{ trade.pnl_pct }}%</td>
-                  <td>{{ trade.holding_candles }}</td>
+                  <td>{{ stock.symbol }}</td>
+                  <td class="{% if stock.return_pct >= 0 %}pnl-pos{% else %}pnl-neg{% endif %}">{{ stock.return_pct }}</td>
+                  <td>{{ stock.win_rate_pct }}</td>
+                  <td>{{ stock.profit_factor }}</td>
+                  <td>{{ stock.sharpe_ratio }}</td>
+                  <td>{{ stock.volatility_pct }}</td>
+                  <td>{{ stock.max_drawdown_pct }}</td>
+                  <td>{{ stock.quality_score }}</td>
+                  <td>{{ stock.trades }}</td>
                 </tr>
                 {% endfor %}
               </tbody>
             </table>
           </div>
-        </details>
+          {% else %}
+            <p>No symbols matched the current metric filters.</p>
+          {% endif %}
         {% endif %}
       </section>
     {% endif %}
@@ -154,6 +228,9 @@ const providerEl = document.getElementById('provider');
 const modeEl = document.getElementById('data_mode');
 const intervalEl = document.getElementById('interval');
 const apiKeyInput = document.getElementById('api_key');
+const tickerInput = document.getElementById('ticker');
+const runModeEl = document.getElementById('run_mode');
+const scanLimitWrap = document.getElementById('scan_limit_wrap');
 
 function syncModes() {
   const provider = providerEl.value;
@@ -176,9 +253,7 @@ function syncModes() {
   }
 
   syncIntervals();
-  const isAlpha = provider === 'alpha';
-  apiKeyInput.required = isAlpha;
-  apiKeyInput.disabled = !isAlpha;
+  syncRunMode();
 }
 
 function syncIntervals() {
@@ -202,9 +277,24 @@ function syncIntervals() {
   }
 }
 
+function syncRunMode() {
+  const scanMode = runModeEl.value === 'scan';
+  if (scanMode) {
+    providerEl.value = 'yahoo';
+  }
+  const isAlpha = providerEl.value === 'alpha' && !scanMode;
+  apiKeyInput.required = isAlpha;
+  apiKeyInput.disabled = !isAlpha;
+  tickerInput.required = !scanMode;
+  tickerInput.disabled = scanMode;
+  scanLimitWrap.style.display = scanMode ? 'grid' : 'none';
+}
+
 providerEl.addEventListener('change', syncModes);
 modeEl.addEventListener('change', syncIntervals);
+runModeEl.addEventListener('change', () => { syncModes(); syncRunMode(); });
 syncModes();
+syncRunMode();
 </script>
 </body>
 </html>

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from io import StringIO
 import json
 from typing import Literal
 
@@ -182,3 +183,79 @@ class YahooFinanceClient:
         if lookback_days <= 1825:
             return "5y"
         return "max"
+
+
+class Russell1000Client:
+    WIKI_URL = "https://en.wikipedia.org/wiki/Russell_1000_Index"
+    ISHARES_URL = (
+        "https://www.ishares.com/us/products/239707/ishares-russell-1000-etf/"
+        "1467271812596.ajax?fileType=csv&fileName=IWB_holdings"
+    )
+
+    def fetch_symbols(self) -> list[str]:
+        try:
+            symbols = self._from_wikipedia()
+            if symbols:
+                return symbols
+        except DataClientError:
+            pass
+
+        symbols = self._from_ishares()
+        if symbols:
+            return symbols
+
+        raise DataClientError("Could not load Russell 1000 constituents from available sources.")
+
+    def _from_wikipedia(self) -> list[str]:
+        try:
+            tables = pd.read_html(self.WIKI_URL)
+        except Exception as exc:  # pandas can raise multiple parser/network errors
+            raise DataClientError(f"Failed to fetch Russell 1000 symbols from Wikipedia: {exc}") from exc
+
+        return self._extract_symbols_from_tables(tables)
+
+    def _from_ishares(self) -> list[str]:
+        try:
+            response = requests.get(self.ISHARES_URL, timeout=30)
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            raise DataClientError(f"Failed to fetch Russell 1000 symbols from iShares: {exc}") from exc
+
+        lines = [line for line in response.text.splitlines() if line.strip()]
+        header_idx = next((i for i, line in enumerate(lines) if line.lower().startswith("ticker,")), None)
+        if header_idx is None:
+            raise DataClientError("iShares holdings CSV did not include a Ticker header.")
+
+        table = pd.read_csv(StringIO("\n".join(lines[header_idx:])))
+        if "Ticker" not in table.columns:
+            raise DataClientError("iShares holdings CSV missing Ticker column.")
+
+        symbols = (
+            table["Ticker"]
+            .dropna()
+            .astype(str)
+            .str.strip()
+            .str.upper()
+            .str.replace(".", "-", regex=False)
+        )
+        return sorted({sym for sym in symbols if sym and sym != "NAN"})
+
+    @staticmethod
+    def _extract_symbols_from_tables(tables: list[pd.DataFrame]) -> list[str]:
+        for table in tables:
+            columns = {str(col).strip().lower(): col for col in table.columns}
+            symbol_col = columns.get("symbol") or columns.get("ticker")
+            if symbol_col is None:
+                continue
+            symbols = (
+                table[symbol_col]
+                .dropna()
+                .astype(str)
+                .str.strip()
+                .str.upper()
+                .str.replace(".", "-", regex=False)
+            )
+            unique = sorted({sym for sym in symbols if sym and sym != "NAN"})
+            if unique:
+                return unique
+        return []

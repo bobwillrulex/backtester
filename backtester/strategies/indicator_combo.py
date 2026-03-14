@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import pandas as pd
 
 from .base import BacktestResult
@@ -196,8 +198,33 @@ def run_indicator_combo(
             notes += " Trailing stop is enabled."
     gains = [float(t["pnl_pct"]) for t in closed_trades]
     winning = [g for g in gains if g > 0]
+    losses = [abs(g) for g in gains if g < 0]
     win_rate_pct = (len(winning) / len(gains) * 100) if gains else 0.0
     average_gain_pct = (sum(gains) / len(gains)) if gains else 0.0
+
+    rolling_peak = equity_curve.cummax()
+    drawdown = ((equity_curve / rolling_peak) - 1) * 100
+    max_drawdown_pct = abs(float(drawdown.min())) if not drawdown.empty else 0.0
+
+    period_returns = equity_curve.pct_change().dropna()
+    volatility_pct = float(period_returns.std(ddof=0) * 100) if not period_returns.empty else 0.0
+    sharpe_ratio = 0.0
+    if not period_returns.empty:
+        std = float(period_returns.std(ddof=0))
+        if std > 0:
+            sharpe_ratio = float(period_returns.mean() / std * math.sqrt(252))
+
+    gross_profit = sum(winning)
+    gross_loss = sum(losses)
+    profit_factor = float(gross_profit / gross_loss) if gross_loss > 0 else (float("inf") if gross_profit > 0 else 0.0)
+
+    quality_components = [
+        max(0.0, min(100.0, win_rate_pct)),
+        max(0.0, min(100.0, sharpe_ratio * 20)),
+        max(0.0, min(100.0, (profit_factor if profit_factor != float("inf") else 10.0) * 10)),
+        max(0.0, 100.0 - max_drawdown_pct),
+    ]
+    quality_score = sum(quality_components) / len(quality_components)
 
     return BacktestResult(
         total_return_pct=round(float(total_return_pct), 2),
@@ -208,6 +235,11 @@ def run_indicator_combo(
         notes=notes,
         win_rate_pct=round(win_rate_pct, 2),
         average_gain_pct=round(average_gain_pct, 2),
+        max_drawdown_pct=round(max_drawdown_pct, 2),
+        volatility_pct=round(volatility_pct, 2),
+        profit_factor=(round(profit_factor, 2) if profit_factor != float("inf") else float("inf")),
+        sharpe_ratio=round(sharpe_ratio, 2),
+        quality_score=round(quality_score, 2),
         trade_details=closed_trades,
     )
 
