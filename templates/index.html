@@ -50,21 +50,21 @@
         <input type="number" name="scan_limit" min="1" max="1000" value="{{ form_data.scan_limit }}" required />
       </label>
 
-      <label>Position Mode
+      <label id="position_mode_wrap">Position Mode
         <select name="position_mode">
           <option value="single" {% if form_data.position_mode == 'single' %}selected{% endif %}>Only one open position</option>
           <option value="multi" {% if form_data.position_mode == 'multi' %}selected{% endif %}>Multi-position mode</option>
         </select>
       </label>
 
-      <label>Trade Category
+      <label id="trade_category_wrap">Trade Category
         <select name="trade_category">
           <option value="none" {% if form_data.trade_category == 'none' %}selected{% endif %}>No category (hold overnight)</option>
           <option value="day" {% if form_data.trade_category == 'day' %}selected{% endif %}>Day trades only (close before overnight)</option>
         </select>
       </label>
 
-      <label>Stop-Loss Mode
+      <label id="stop_loss_mode_wrap">Stop-Loss Mode
         <select name="stop_loss_mode">
           <option value="none" {% if form_data.stop_loss_mode == 'none' %}selected{% endif %}>None</option>
           <option value="percent" {% if form_data.stop_loss_mode == 'percent' %}selected{% endif %}>Fixed %</option>
@@ -75,26 +75,14 @@
         </select>
       </label>
 
-      <label>Stop-Loss % (used when mode = Fixed %)
+      <label id="stop_loss_percent_wrap">Stop-Loss % (used when mode = Fixed %)
         <input type="number" name="stop_loss_percent" min="0.1" max="99" step="0.1" value="{{ form_data.stop_loss_percent }}" required />
       </label>
 
-      <label>
+      <label id="trailing_stop_wrap">
         <input type="checkbox" name="trailing_stop" {% if form_data.trailing_stop %}checked{% endif %}/>
         Enable trailing stop-loss
       </label>
-
-      <fieldset>
-        <legend>Metric filters (applies to "Find stocks" mode)</legend>
-        <div class="metric-grid">
-          <label>Min Win Rate %<input type="number" name="min_win_rate" min="0" max="100" step="0.1" value="{{ form_data.min_win_rate }}" /></label>
-          <label>Min Profit Factor<input type="number" name="min_profit_factor" min="0" step="0.1" value="{{ form_data.min_profit_factor }}" /></label>
-          <label>Min Sharpe Ratio<input type="number" name="min_sharpe_ratio" min="0" step="0.1" value="{{ form_data.min_sharpe_ratio }}" /></label>
-          <label>Min Quality Score<input type="number" name="min_quality_score" min="0" max="100" step="0.1" value="{{ form_data.min_quality_score }}" /></label>
-          <label>Max Drawdown %<input type="number" name="max_drawdown" min="0" max="100" step="0.1" value="{{ form_data.max_drawdown }}" /></label>
-          <label>Max Volatility %<input type="number" name="max_volatility" min="0" max="100" step="0.1" value="{{ form_data.max_volatility }}" /></label>
-        </div>
-      </fieldset>
 
       <fieldset>
         <legend>Indicators / Strategies (select one or more)</legend>
@@ -231,6 +219,11 @@ const apiKeyInput = document.getElementById('api_key');
 const tickerInput = document.getElementById('ticker');
 const runModeEl = document.getElementById('run_mode');
 const scanLimitWrap = document.getElementById('scan_limit_wrap');
+const positionModeWrap = document.getElementById('position_mode_wrap');
+const tradeCategoryWrap = document.getElementById('trade_category_wrap');
+const stopLossModeWrap = document.getElementById('stop_loss_mode_wrap');
+const stopLossPercentWrap = document.getElementById('stop_loss_percent_wrap');
+const trailingStopWrap = document.getElementById('trailing_stop_wrap');
 
 function syncModes() {
   const provider = providerEl.value;
@@ -288,6 +281,12 @@ function syncRunMode() {
   tickerInput.required = !scanMode;
   tickerInput.disabled = scanMode;
   scanLimitWrap.style.display = scanMode ? 'grid' : 'none';
+
+  positionModeWrap.style.display = scanMode ? 'none' : 'grid';
+  tradeCategoryWrap.style.display = scanMode ? 'none' : 'grid';
+  stopLossModeWrap.style.display = scanMode ? 'none' : 'grid';
+  stopLossPercentWrap.style.display = scanMode ? 'none' : 'grid';
+  trailingStopWrap.style.display = scanMode ? 'none' : 'grid';
 }
 
 providerEl.addEventListener('change', syncModes);
