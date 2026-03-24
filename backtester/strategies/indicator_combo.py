@@ -286,8 +286,11 @@ def _indicator_signals(data: pd.DataFrame, indicator: str) -> tuple[pd.Series, p
         bullish = rsi < 35
         bearish = rsi > 70
     elif indicator == "stoch_rsi":
-        rsi = _rsi(close)
-        stoch = (rsi - rsi.rolling(14).min()) / (rsi.rolling(14).max() - rsi.rolling(14).min())
+        rsi = _rsi(close).astype("float64")
+        rsi_low = rsi.rolling(14, min_periods=14).min()
+        rsi_high = rsi.rolling(14, min_periods=14).max()
+        rsi_range = (rsi_high - rsi_low).where(lambda s: s != 0)
+        stoch = (rsi - rsi_low).div(rsi_range).clip(lower=0.0, upper=1.0).fillna(0.5)
         bullish = stoch < 0.2
         bearish = stoch > 0.8
     elif indicator == "bb":
